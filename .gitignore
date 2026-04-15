@@ -1,0 +1,24 @@
+# Dependencies
+node_modules/
+
+# Next.js
+.next/
+out/
+
+# Generated session files (audio, video) — too large for git
+public/sessions/
+
+# Environment secrets
+.env.local
+.env.*.local
+
+# Remotion bundle cache
+.remotion/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/settings.json
+.idea/
