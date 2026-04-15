@@ -12,6 +12,7 @@
 import fs from 'fs';
 import path from 'path';
 import { ensureSessionDir } from './session';
+import { getEnv, hasEnv } from './env';
 import type { Scene } from '@/remotion/types';
 
 // HF model used for TTS — swap to any model that supports text-to-speech
@@ -22,7 +23,7 @@ const HF_TTS_MODEL = process.env.HF_TTS_MODEL ?? 'facebook/mms-tts-eng';
 
 async function ttsHuggingFace(text: string, outputPath: string): Promise<void> {
   const { HfInference } = await import('@huggingface/inference');
-  const hf = new HfInference(process.env.HUGGINGFACE_API_KEY);
+  const hf = new HfInference(getEnv('HUGGINGFACE_API_KEY'));
 
   const audioBlob = await hf.textToSpeech({
     model: HF_TTS_MODEL,
@@ -35,6 +36,7 @@ async function ttsHuggingFace(text: string, outputPath: string): Promise<void> {
 
 async function ttsElevenLabs(text: string, outputPath: string): Promise<void> {
   const voiceId = process.env.ELEVENLABS_VOICE_ID ?? 'EXAVITQu4vr4xnSDxMaL'; // Rachel
+  const apiKey = getEnv('ELEVENLABS_API_KEY');
   const response = await fetch(
     `https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`,
     {
@@ -42,7 +44,7 @@ async function ttsElevenLabs(text: string, outputPath: string): Promise<void> {
       headers: {
         Accept: 'audio/mpeg',
         'Content-Type': 'application/json',
-        'xi-api-key': process.env.ELEVENLABS_API_KEY!,
+        'xi-api-key': apiKey!,
       },
       body: JSON.stringify({
         text,
@@ -59,7 +61,7 @@ async function ttsElevenLabs(text: string, outputPath: string): Promise<void> {
 
 async function ttsOpenAI(text: string, outputPath: string): Promise<void> {
   const OpenAI = (await import('openai')).default;
-  const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+  const client = new OpenAI({ apiKey: getEnv('OPENAI_API_KEY') });
 
   const response = await client.audio.speech.create({
     model: 'tts-1',
@@ -85,16 +87,16 @@ export async function generateAudioFiles(
     const filename = `audio-${i}.mp3`;
     const outputPath = path.join(dir, filename);
 
-    if (process.env.HUGGINGFACE_API_KEY) {
+    if (hasEnv('HUGGINGFACE_API_KEY')) {
       await ttsHuggingFace(scene.text, outputPath);
-    } else if (process.env.ELEVENLABS_API_KEY) {
+    } else if (hasEnv('ELEVENLABS_API_KEY')) {
       await ttsElevenLabs(scene.text, outputPath);
-    } else if (process.env.OPENAI_API_KEY) {
+    } else if (hasEnv('OPENAI_API_KEY')) {
       await ttsOpenAI(scene.text, outputPath);
     } else {
       throw new Error(
-        'No TTS key configured. Set HUGGINGFACE_API_KEY (free at huggingface.co), ' +
-        'ELEVENLABS_API_KEY, or OPENAI_API_KEY in .env.local',
+        'No valid TTS key configured. Set HUGGINGFACE_API_KEY (free at huggingface.co), ' +
+        'ELEVENLABS_API_KEY, or OPENAI_API_KEY in .env.local, and remove any example placeholder values.',
       );
     }
 
