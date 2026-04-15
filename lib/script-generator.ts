@@ -163,13 +163,41 @@ async function generateWithOpenAI(resumeText: string): Promise<Script> {
   return JSON.parse(raw) as Script;
 }
 
+type ScriptProvider = {
+  name: string;
+  enabled: boolean;
+  generate: (resumeText: string) => Promise<Script>;
+};
+
 export async function generateScript(resumeText: string): Promise<Script> {
-  if (hasEnv('OPENROUTER_API_KEY')) return generateWithOpenRouter(resumeText);
-  if (hasEnv('GROQ_API_KEY')) return generateWithGroq(resumeText);
-  if (hasEnv('ANTHROPIC_API_KEY')) return generateWithClaude(resumeText);
-  if (hasEnv('OPENAI_API_KEY')) return generateWithOpenAI(resumeText);
+  const providers: ScriptProvider[] = [
+    { name: 'OpenRouter', enabled: hasEnv('OPENROUTER_API_KEY'), generate: generateWithOpenRouter },
+    { name: 'Groq', enabled: hasEnv('GROQ_API_KEY'), generate: generateWithGroq },
+    { name: 'Anthropic', enabled: hasEnv('ANTHROPIC_API_KEY'), generate: generateWithClaude },
+    { name: 'OpenAI', enabled: hasEnv('OPENAI_API_KEY'), generate: generateWithOpenAI },
+  ];
+
+  const availableProviders = providers.filter((provider) => provider.enabled);
+  if (availableProviders.length === 0) {
+    throw new Error(
+      'No valid AI key configured. Set OPENROUTER_API_KEY (free at openrouter.ai), ' +
+      'GROQ_API_KEY, ANTHROPIC_API_KEY, or OPENAI_API_KEY in .env.local, and remove any example placeholder values.',
+    );
+  }
+
+  const failures: string[] = [];
+
+  for (const provider of availableProviders) {
+    try {
+      return await provider.generate(resumeText);
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
+      console.warn(`[script] ${provider.name} failed: ${message}`);
+      failures.push(`${provider.name}: ${message}`);
+    }
+  }
+
   throw new Error(
-    'No valid AI key configured. Set OPENROUTER_API_KEY (free at openrouter.ai), ' +
-    'GROQ_API_KEY, ANTHROPIC_API_KEY, or OPENAI_API_KEY in .env.local, and remove any example placeholder values.',
+    `All configured AI providers failed. ${failures.join(' | ')}`,
   );
 }
