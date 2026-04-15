@@ -56,6 +56,7 @@ export default function UploadPage() {
   // Shared pipeline state
   const [step, setStep] = useState<PipelineStep>('idle');
   const [error, setError] = useState<string | null>(null);
+  const [warning, setWarning] = useState<string | null>(null);
   const [scenes, setScenes] = useState<Scene[]>([]);
 
   // ── Drop zone ─────────────────────────────────────────────────────────────
@@ -75,6 +76,7 @@ export default function UploadPage() {
   // ── Shared pipeline steps (script → audio → preview) ─────────────────────
   async function runScriptAndAudio(text: string) {
     const sessionId = uuidv4();
+    setWarning(null);
 
     setStep('scripting');
     const scriptRes = await fetch('/api/generate-script', {
@@ -98,10 +100,11 @@ export default function UploadPage() {
     });
     if (!audioRes.ok) throw new Error(await readError(audioRes));
     const audioText = await audioRes.text();
-    let audioBody: { audioUrls?: string[] };
+    let audioBody: { audioUrls?: string[]; warning?: string };
     try { audioBody = JSON.parse(audioText); }
     catch { throw new Error(`Audio API returned non-JSON: ${audioText.slice(0, 120)}`); }
-    const { audioUrls = [] } = audioBody;
+    const { audioUrls = [], warning: audioWarning } = audioBody;
+    if (audioWarning) setWarning(audioWarning);
 
     const finalScenes: Scene[] = rawScenes.map((s: Scene, i: number) => ({
       ...s,
@@ -109,7 +112,10 @@ export default function UploadPage() {
     }));
 
     setStep('done');
-    sessionStorage.setItem(`ncv_${sessionId}`, JSON.stringify({ sessionId, scenes: finalScenes }));
+    sessionStorage.setItem(
+      `ncv_${sessionId}`,
+      JSON.stringify({ sessionId, scenes: finalScenes, warning: audioWarning ?? null }),
+    );
     router.push(`/preview?session=${sessionId}`);
   }
 
@@ -117,6 +123,7 @@ export default function UploadPage() {
   const runPdfPipeline = async () => {
     if (!file) return;
     setError(null);
+    setWarning(null);
     try {
       setStep('uploading');
       const formData = new FormData();
@@ -135,6 +142,7 @@ export default function UploadPage() {
   const runTextPipeline = async () => {
     if (resumeText.trim().length < 50) return;
     setError(null);
+    setWarning(null);
     try {
       await runScriptAndAudio(resumeText.trim());
     } catch (err: unknown) {
@@ -236,6 +244,12 @@ export default function UploadPage() {
         {error && (
           <div className="mt-4 p-4 bg-red-500/10 border border-red-500/30 rounded-xl text-red-400 text-sm">
             {error}
+          </div>
+        )}
+
+        {warning && (
+          <div className="mt-4 p-4 bg-amber-500/10 border border-amber-500/30 rounded-xl text-amber-300 text-sm">
+            {warning}
           </div>
         )}
 

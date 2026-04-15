@@ -15,23 +15,35 @@ import { ensureSessionDir } from './session';
 import { getEnv, hasEnv } from './env';
 import type { Scene } from '@/remotion/types';
 
-// HF model used for TTS — swap to any model that supports text-to-speech
-// Good free options:
-//   facebook/mms-tts-eng   — fast, clear English voice
-//   espnet/kan-bayashi_ljspeech_vits — natural-sounding, slower
-const HF_TTS_MODEL = process.env.HF_TTS_MODEL ?? 'facebook/mms-tts-eng';
+const HF_TTS_MODELS = [
+  getEnv('HF_TTS_MODEL') ?? 'espnet/kan-bayashi_ljspeech_vits',
+  'facebook/mms-tts-eng',
+];
 
 async function ttsHuggingFace(text: string, outputPath: string): Promise<void> {
   const { HfInference } = await import('@huggingface/inference');
   const hf = new HfInference(getEnv('HUGGINGFACE_API_KEY'));
+  const failures: string[] = [];
 
-  const audioBlob = await hf.textToSpeech({
-    model: HF_TTS_MODEL,
-    inputs: text,
-  });
+  for (const model of HF_TTS_MODELS) {
+    try {
+      const audioBlob = await hf.textToSpeech({
+        provider: 'hf-inference',
+        model,
+        inputs: text,
+      });
 
-  const buffer = Buffer.from(await audioBlob.arrayBuffer());
-  fs.writeFileSync(outputPath, buffer);
+      const buffer = Buffer.from(await audioBlob.arrayBuffer());
+      fs.writeFileSync(outputPath, buffer);
+      return;
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
+      failures.push(`${model}: ${message}`);
+      console.warn(`[tts] Hugging Face model ${model} failed: ${message}`);
+    }
+  }
+
+  throw new Error(`All Hugging Face TTS models failed. ${failures.join(' | ')}`);
 }
 
 async function ttsElevenLabs(text: string, outputPath: string): Promise<void> {
@@ -78,30 +90,58 @@ export async function generateAudioFiles(
   scenes: Scene[],
   sessionId: string,
   baseUrl: string,
-): Promise<string[]> {
+): Promise<{ audioUrls: string[]; warnings: string[] }> {
   const dir = ensureSessionDir(sessionId);
   const urls: string[] = [];
+  const warnings: string[] = [];
 
   for (let i = 0; i < scenes.length; i++) {
     const scene = scenes[i];
     const filename = `audio-${i}.mp3`;
     const outputPath = path.join(dir, filename);
 
+    const errors: string[] = [];
+
     if (hasEnv('HUGGINGFACE_API_KEY')) {
-      await ttsHuggingFace(scene.text, outputPath);
-    } else if (hasEnv('ELEVENLABS_API_KEY')) {
-      await ttsElevenLabs(scene.text, outputPath);
-    } else if (hasEnv('OPENAI_API_KEY')) {
-      await ttsOpenAI(scene.text, outputPath);
-    } else {
+      try {
+        await ttsHuggingFace(scene.text, outputPath);
+        urls.push(`${baseUrl}/sessions/${sessionId}/${filename}`);
+        continue;
+      } catch (error: unknown) {
+        errors.push(`Hugging Face: ${error instanceof Error ? error.message : String(error)}`);
+      }
+    }
+
+    if (hasEnv('ELEVENLABS_API_KEY')) {
+      try {
+        await ttsElevenLabs(scene.text, outputPath);
+        urls.push(`${baseUrl}/sessions/${sessionId}/${filename}`);
+        continue;
+      } catch (error: unknown) {
+        errors.push(`ElevenLabs: ${error instanceof Error ? error.message : String(error)}`);
+      }
+    }
+
+    if (hasEnv('OPENAI_API_KEY')) {
+      try {
+        await ttsOpenAI(scene.text, outputPath);
+        urls.push(`${baseUrl}/sessions/${sessionId}/${filename}`);
+        continue;
+      } catch (error: unknown) {
+        errors.push(`OpenAI: ${error instanceof Error ? error.message : String(error)}`);
+      }
+    }
+
+    if (errors.length === 0) {
       throw new Error(
         'No valid TTS key configured. Set HUGGINGFACE_API_KEY (free at huggingface.co), ' +
         'ELEVENLABS_API_KEY, or OPENAI_API_KEY in .env.local, and remove any example placeholder values.',
       );
     }
 
-    urls.push(`${baseUrl}/sessions/${sessionId}/${filename}`);
+    warnings.push(`Scene ${i + 1} (${scene.type}) has no narration. ${errors.join(' | ')}`);
+    urls.push('');
   }
 
-  return urls;
+  return { audioUrls: urls, warnings };
 }

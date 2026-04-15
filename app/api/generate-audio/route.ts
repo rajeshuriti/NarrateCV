@@ -2,7 +2,7 @@
  * POST /api/generate-audio
  * Body: { sessionId: string, scenes: Scene[] }
  * Generates one MP3 per scene, saves to /public/sessions/{sessionId}/,
- * returns { audioUrls: string[] }
+ * returns { audioUrls: string[], warning?: string }
  */
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -32,9 +32,14 @@ export async function POST(req: NextRequest) {
     }
 
     const baseUrl = getBaseUrl(req);
-    const audioUrls = await generateAudioFiles(scenes, sessionId, baseUrl);
+    const { audioUrls, warnings } = await generateAudioFiles(scenes, sessionId, baseUrl);
 
-    return NextResponse.json({ audioUrls });
+    return NextResponse.json({
+      audioUrls,
+      warning: warnings.length > 0
+        ? `Voice-over could not be generated for ${warnings.length} scene(s). A silent video will be created instead.`
+        : undefined,
+    });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'Unknown error';
     console.error('[generate-audio]', message);

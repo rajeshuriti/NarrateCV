@@ -26,6 +26,7 @@ function PreviewInner() {
   const [renderState, setRenderState] = useState<RenderState>('idle');
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
   const [renderError, setRenderError] = useState<string | null>(null);
+  const [warning, setWarning] = useState<string | null>(null);
   const renderCalledRef = useRef(false);
 
   // ── Load session from sessionStorage ─────────────────────────────────────
@@ -33,8 +34,13 @@ function PreviewInner() {
     if (!sessionId) { setNotFound(true); return; }
     const raw = sessionStorage.getItem(`ncv_${sessionId}`);
     if (!raw) { setNotFound(true); return; }
-    const { scenes: s } = JSON.parse(raw) as { sessionId: string; scenes: Scene[] };
+    const { scenes: s, warning: storedWarning } = JSON.parse(raw) as {
+      sessionId: string;
+      scenes: Scene[];
+      warning?: string | null;
+    };
     setScenes(s);
+    setWarning(storedWarning ?? null);
   }, [sessionId]);
 
   // ── Trigger server render automatically once scenes are loaded ────────────
@@ -108,6 +114,12 @@ function PreviewInner() {
         <div className="rounded-2xl overflow-hidden border border-border bg-surface shadow-xl shadow-black/50">
           <PlayerWrapper scenes={scenes} durationInFrames={totalFrames} />
         </div>
+
+        {warning && (
+          <div className="mt-6 p-4 bg-amber-500/10 border border-amber-500/30 rounded-xl text-amber-300 text-sm">
+            {warning}
+          </div>
+        )}
 
         {/* Scene list */}
         <div className="mt-8 grid gap-3">
