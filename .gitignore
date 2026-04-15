@@ -11,6 +11,7 @@ public/sessions/
 # Environment secrets
 .env.local
 .env.*.local
+.env.*.example
 
 # Remotion bundle cache
 .remotion/
