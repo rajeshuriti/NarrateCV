@@ -38,32 +38,39 @@ const HUGGINGFACE_CHAT_MODELS = [
   'mistralai/Mistral-7B-Instruct-v0.3',
 ];
 
-const SYSTEM_PROMPT = `You are an expert resume storyteller. Convert the resume text into a compelling
+function buildSystemPrompt(hasPhoto: boolean): string {
+  const photoInstruction = hasPhoto
+    ? `\n- The user has uploaded a profile photo. Set "usePhoto": true on the "intro" and "closing" scenes ONLY.`
+    : `\n- No profile photo was uploaded. Set "usePhoto": false on all scenes.`;
+
+  return `You are an expert resume storyteller. Convert the resume text into a compelling
 narrated video script. Output ONLY valid JSON — no markdown, no explanation.
 
 Rules:
 - Short, punchy sentences optimised for voice-over (max 25 words per scene)
 - No filler phrases ("I am passionate about…", "leveraging synergies…")
 - Focus on concrete impact and numbers where present
-- Each scene must have a clear single focus
+- Each scene must have a clear single focus${photoInstruction}
 
 Required JSON shape:
 {
   "scenes": [
-    { "type": "intro",      "text": "<name + 1-line title>",         "duration": 4 },
-    { "type": "skills",     "text": "<comma-separated key skills>",  "duration": 5 },
-    { "type": "experience", "text": "<2-3 most impressive roles>",   "duration": 6 },
-    { "type": "impact",     "text": "<3 quantified achievements>",   "duration": 5 },
-    { "type": "closing",    "text": "<1 memorable closing line>",    "duration": 4 }
+    { "type": "intro",      "text": "<name + 1-line title>",         "duration": 4, "usePhoto": ${hasPhoto} },
+    { "type": "skills",     "text": "<comma-separated key skills>",  "duration": 5, "usePhoto": false },
+    { "type": "experience", "text": "<2-3 most impressive roles>",   "duration": 6, "usePhoto": false },
+    { "type": "project",    "text": "<1-2 standout projects>",       "duration": 6, "usePhoto": false },
+    { "type": "impact",     "text": "<3 quantified achievements>",   "duration": 5, "usePhoto": false },
+    { "type": "closing",    "text": "<1 memorable closing line>",    "duration": 4, "usePhoto": ${hasPhoto} }
   ]
 }`;
+}
 
 const USER_PROMPT = (resumeText: string) =>
   `Convert this resume into the JSON video script:\n\n${resumeText}`;
 
 /**
  * Extracts a JSON object from a model response that may be wrapped in
- * markdown code fences (```json … ```) or contain leading/trailing prose.
+ * markdown code fences (\`\`\`json … \`\`\`) or contain leading/trailing prose.
  */
 function extractJson(text: string, model: string): Script {
   // Strip markdown fences if present
@@ -91,7 +98,7 @@ function shouldTryNextModel(error: unknown): boolean {
   return status === 429 || status === 404 || status === 400 || status === 401 || status === 402 || status === 403;
 }
 
-async function generateWithOpenRouter(resumeText: string): Promise<Script> {
+async function generateWithOpenRouter(resumeText: string, hasPhoto: boolean): Promise<Script> {
   const OpenAI = (await import('openai')).default;
   const client = new OpenAI({
     apiKey: getEnv('OPENROUTER_API_KEY'),
@@ -109,10 +116,8 @@ async function generateWithOpenRouter(resumeText: string): Promise<Script> {
       console.log(`[script] trying OpenRouter model: ${model}`);
       const response = await client.chat.completions.create({
         model,
-        // Merge system + user into one message — many open-source models reject
-        // a standalone system role and return 400.
         messages: [
-          { role: 'user', content: `${SYSTEM_PROMPT}\n\n${USER_PROMPT(resumeText)}` },
+          { role: 'user', content: `${buildSystemPrompt(hasPhoto)}\n\n${USER_PROMPT(resumeText)}` },
         ],
       });
       const raw = response.choices[0]?.message?.content ?? '{}';
@@ -124,14 +129,14 @@ async function generateWithOpenRouter(resumeText: string): Promise<Script> {
         lastError = err instanceof Error ? err : new Error(String(err));
         continue;
       }
-      throw err; // non-429 errors are real failures
+      throw err;
     }
   }
 
   throw new Error(`All OpenRouter free models are rate-limited. ${lastError.message}`);
 }
 
-async function generateWithGemini(resumeText: string): Promise<Script> {
+async function generateWithGemini(resumeText: string, hasPhoto: boolean): Promise<Script> {
   const apiKey = getEnv('GEMINI_API_KEY');
   let lastError: Error = new Error('No models available');
 
@@ -147,7 +152,7 @@ async function generateWithGemini(resumeText: string): Promise<Script> {
             contents: [
               {
                 role: 'user',
-                parts: [{ text: `${SYSTEM_PROMPT}\n\n${USER_PROMPT(resumeText)}` }],
+                parts: [{ text: `${buildSystemPrompt(hasPhoto)}\n\n${USER_PROMPT(resumeText)}` }],
               },
             ],
             generationConfig: {
@@ -188,7 +193,7 @@ async function generateWithGemini(resumeText: string): Promise<Script> {
   throw new Error(`All Gemini models failed. ${lastError.message}`);
 }
 
-async function generateWithHuggingFace(resumeText: string): Promise<Script> {
+async function generateWithHuggingFace(resumeText: string, hasPhoto: boolean): Promise<Script> {
   const { HfInference } = await import('@huggingface/inference');
   const hf = new HfInference(getEnv('HUGGINGFACE_API_KEY'));
   let lastError: Error = new Error('No models available');
@@ -199,7 +204,7 @@ async function generateWithHuggingFace(resumeText: string): Promise<Script> {
       const response = await hf.chatCompletion({
         model,
         messages: [
-          { role: 'system', content: SYSTEM_PROMPT },
+          { role: 'system', content: buildSystemPrompt(hasPhoto) },
           { role: 'user', content: USER_PROMPT(resumeText) },
         ],
         max_tokens: 1024,
@@ -228,7 +233,7 @@ async function generateWithHuggingFace(resumeText: string): Promise<Script> {
   throw new Error(`All Hugging Face models failed. ${lastError.message}`);
 }
 
-async function generateWithGroq(resumeText: string): Promise<Script> {
+async function generateWithGroq(resumeText: string, hasPhoto: boolean): Promise<Script> {
   const Groq = (await import('groq-sdk')).default;
   const client = new Groq({ apiKey: getEnv('GROQ_API_KEY') });
 
@@ -236,7 +241,7 @@ async function generateWithGroq(resumeText: string): Promise<Script> {
     model: 'llama-3.3-70b-versatile',
     response_format: { type: 'json_object' },
     messages: [
-      { role: 'system', content: SYSTEM_PROMPT },
+      { role: 'system', content: buildSystemPrompt(hasPhoto) },
       { role: 'user', content: USER_PROMPT(resumeText) },
     ],
   });
@@ -245,7 +250,7 @@ async function generateWithGroq(resumeText: string): Promise<Script> {
   return JSON.parse(raw) as Script;
 }
 
-async function generateWithClaude(resumeText: string): Promise<Script> {
+async function generateWithClaude(resumeText: string, hasPhoto: boolean): Promise<Script> {
   const Anthropic = (await import('@anthropic-ai/sdk')).default;
   const client = new Anthropic({ apiKey: getEnv('ANTHROPIC_API_KEY') });
 
@@ -253,14 +258,14 @@ async function generateWithClaude(resumeText: string): Promise<Script> {
     model: 'claude-sonnet-4-6',
     max_tokens: 1024,
     messages: [{ role: 'user', content: USER_PROMPT(resumeText) }],
-    system: SYSTEM_PROMPT,
+    system: buildSystemPrompt(hasPhoto),
   });
 
   const raw = message.content[0].type === 'text' ? message.content[0].text : '';
   return JSON.parse(raw) as Script;
 }
 
-async function generateWithOpenAI(resumeText: string): Promise<Script> {
+async function generateWithOpenAI(resumeText: string, hasPhoto: boolean): Promise<Script> {
   const OpenAI = (await import('openai')).default;
   const client = new OpenAI({ apiKey: getEnv('OPENAI_API_KEY') });
 
@@ -268,7 +273,7 @@ async function generateWithOpenAI(resumeText: string): Promise<Script> {
     model: 'gpt-4o-mini',
     response_format: { type: 'json_object' },
     messages: [
-      { role: 'system', content: SYSTEM_PROMPT },
+      { role: 'system', content: buildSystemPrompt(hasPhoto) },
       { role: 'user', content: USER_PROMPT(resumeText) },
     ],
   });
@@ -280,10 +285,10 @@ async function generateWithOpenAI(resumeText: string): Promise<Script> {
 type ScriptProvider = {
   name: string;
   enabled: boolean;
-  generate: (resumeText: string) => Promise<Script>;
+  generate: (resumeText: string, hasPhoto: boolean) => Promise<Script>;
 };
 
-export async function generateScript(resumeText: string): Promise<Script> {
+export async function generateScript(resumeText: string, hasPhoto: boolean = false): Promise<Script> {
   const providers: ScriptProvider[] = [
     { name: 'OpenRouter', enabled: hasEnv('OPENROUTER_API_KEY'), generate: generateWithOpenRouter },
     { name: 'Gemini', enabled: hasEnv('GEMINI_API_KEY'), generate: generateWithGemini },
@@ -306,7 +311,7 @@ export async function generateScript(resumeText: string): Promise<Script> {
 
   for (const provider of availableProviders) {
     try {
-      return await provider.generate(resumeText);
+      return await provider.generate(resumeText, hasPhoto);
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : String(error);
       console.warn(`[script] ${provider.name} failed: ${message}`);

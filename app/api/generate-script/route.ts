@@ -1,6 +1,6 @@
 /**
  * POST /api/generate-script
- * Body: { resumeText: string }
+ * Body: { resumeText: string, hasPhoto?: boolean }
  * Returns: { scenes: Scene[] }
  */
 
@@ -13,6 +13,7 @@ export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
     const resumeText: string = body?.resumeText;
+    const hasPhoto: boolean = body?.hasPhoto ?? false;
 
     if (!resumeText || resumeText.trim().length < 50) {
       return NextResponse.json({ error: 'resumeText is required' }, { status: 400 });
@@ -20,7 +21,7 @@ export async function POST(req: NextRequest) {
 
     // Truncate to ~4000 chars — enough for Claude / GPT-4o-mini context
     const trimmed = resumeText.slice(0, 4000);
-    const script = await generateScript(trimmed);
+    const script = await generateScript(trimmed, hasPhoto);
 
     // Sanity-check the returned JSON has the right shape
     if (!Array.isArray(script?.scenes) || script.scenes.length === 0) {

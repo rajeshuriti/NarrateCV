@@ -22,6 +22,7 @@ function PreviewInner() {
   const sessionId = params.get('session') ?? '';
 
   const [scenes, setScenes] = useState<Scene[]>([]);
+  const [photoUrl, setPhotoUrl] = useState<string | undefined>(undefined);
   const [notFound, setNotFound] = useState(false);
   const [renderState, setRenderState] = useState<RenderState>('idle');
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
@@ -34,13 +35,15 @@ function PreviewInner() {
     if (!sessionId) { setNotFound(true); return; }
     const raw = sessionStorage.getItem(`ncv_${sessionId}`);
     if (!raw) { setNotFound(true); return; }
-    const { scenes: s, warning: storedWarning } = JSON.parse(raw) as {
+    const { scenes: s, warning: storedWarning, photoUrl: storedPhotoUrl } = JSON.parse(raw) as {
       sessionId: string;
       scenes: Scene[];
       warning?: string | null;
+      photoUrl?: string;
     };
     setScenes(s);
     setWarning(storedWarning ?? null);
+    setPhotoUrl(storedPhotoUrl);
   }, [sessionId]);
 
   // ── Trigger server render automatically once scenes are loaded ────────────
@@ -58,7 +61,7 @@ function PreviewInner() {
       const res = await fetch('/api/render', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ sessionId, scenes }),
+        body: JSON.stringify({ sessionId, scenes, photoUrl }),
       });
       if (!res.ok) throw new Error((await res.json()).error);
       const { videoUrl: url } = await res.json();
@@ -112,7 +115,7 @@ function PreviewInner() {
 
         {/* Remotion Player — live preview directly in the browser */}
         <div className="rounded-2xl overflow-hidden border border-border bg-surface shadow-xl shadow-black/50">
-          <PlayerWrapper scenes={scenes} durationInFrames={totalFrames} />
+          <PlayerWrapper scenes={scenes} durationInFrames={totalFrames} photoUrl={photoUrl} />
         </div>
 
         {warning && (

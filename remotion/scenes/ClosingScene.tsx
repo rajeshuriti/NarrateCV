@@ -1,11 +1,13 @@
 import React from 'react';
 import { useCurrentFrame, useVideoConfig, spring, interpolate } from 'remotion';
+import { Img } from 'remotion';
 
 interface Props {
   text: string;
+  photoUrl?: string;
 }
 
-export const ClosingScene: React.FC<Props> = ({ text }) => {
+export const ClosingScene: React.FC<Props> = ({ text, photoUrl }) => {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
 
@@ -16,6 +18,10 @@ export const ClosingScene: React.FC<Props> = ({ text }) => {
   const ctaScale = spring({ frame: frame - 20, fps, from: 0.8, to: 1, durationInFrames: 18 });
 
   const brandOpacity = spring({ frame: frame - 35, fps, from: 0, to: 1, durationInFrames: 15 });
+
+  // Photo animations
+  const photoOpacity = spring({ frame: frame - 5, fps, from: 0, to: 1, durationInFrames: 18 });
+  const photoScale = spring({ frame: frame - 5, fps, from: 0.85, to: 1, durationInFrames: 20, config: { damping: 14 } });
 
   return (
     <div
@@ -29,7 +35,7 @@ export const ClosingScene: React.FC<Props> = ({ text }) => {
         background: 'linear-gradient(135deg, #0a0a14 0%, #12121f 60%, #1a0a2e 100%)',
         fontFamily: 'Inter, system-ui, sans-serif',
         padding: '80px',
-        gap: 40,
+        gap: 32,
       }}
     >
       {/* Accent orb */}
@@ -46,6 +52,37 @@ export const ClosingScene: React.FC<Props> = ({ text }) => {
           pointerEvents: 'none',
         }}
       />
+
+      {/* Profile photo — elegant small avatar above the message */}
+      {photoUrl && (
+        <div
+          style={{
+            opacity: photoOpacity,
+            transform: `scale(${photoScale})`,
+            marginBottom: 8,
+          }}
+        >
+          <div
+            style={{
+              width: 140,
+              height: 140,
+              borderRadius: '50%',
+              overflow: 'hidden',
+              border: '3px solid rgba(99,102,241,0.4)',
+              boxShadow: '0 0 40px rgba(99,102,241,0.25)',
+            }}
+          >
+            <Img
+              src={photoUrl}
+              style={{
+                width: '100%',
+                height: '100%',
+                objectFit: 'cover',
+              }}
+            />
+          </div>
+        </div>
+      )}
 
       {/* Main message */}
       <p

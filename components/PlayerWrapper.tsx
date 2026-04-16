@@ -14,13 +14,14 @@ import type { Scene } from '@/remotion/types';
 interface Props {
   scenes: Scene[];
   durationInFrames: number;
+  photoUrl?: string;
 }
 
-export default function PlayerWrapper({ scenes, durationInFrames }: Props) {
+export default function PlayerWrapper({ scenes, durationInFrames, photoUrl }: Props) {
   return (
     <Player
       component={NarrateVideo}
-      inputProps={{ scenes }}
+      inputProps={{ scenes, photoUrl }}
       durationInFrames={Math.max(durationInFrames, 1)}
       compositionWidth={1920}
       compositionHeight={1080}

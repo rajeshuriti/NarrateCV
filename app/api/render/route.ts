@@ -1,6 +1,6 @@
 /**
  * POST /api/render
- * Body: { sessionId: string, scenes: Scene[] }
+ * Body: { sessionId: string, scenes: Scene[], photoUrl?: string }
  *
  * Server-side Remotion render pipeline:
  *   1. bundle() — webpack-bundles the Remotion entry point
@@ -33,7 +33,11 @@ function getBaseUrl(req: NextRequest): string {
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { sessionId, scenes } = body as { sessionId: string; scenes: Scene[] };
+    const { sessionId, scenes, photoUrl } = body as {
+      sessionId: string;
+      scenes: Scene[];
+      photoUrl?: string;
+    };
 
     if (!sessionId || !Array.isArray(scenes) || scenes.length === 0) {
       return NextResponse.json({ error: 'sessionId and scenes required' }, { status: 400 });
@@ -43,16 +47,14 @@ export async function POST(req: NextRequest) {
     const outputPath = path.join(dir, 'video.mp4');
 
     // ── 1. Bundle the Remotion entry point ──────────────────────────────────
-    // The bundle is a webpack output that Chrome uses to render each frame.
     const entryPoint = path.join(process.cwd(), 'remotion', 'index.ts');
     const bundleLocation = await bundle({
       entryPoint,
-      // Pass-through webpack config (no overrides needed for MVP)
       webpackOverride: (cfg) => cfg,
     });
 
     // ── 2. Resolve the composition (runs calculateMetadata) ─────────────────
-    const inputProps = { scenes };
+    const inputProps = { scenes, photoUrl };
     const composition = await selectComposition({
       serveUrl: bundleLocation,
       id: 'NarrateCV',
@@ -66,7 +68,6 @@ export async function POST(req: NextRequest) {
       codec: 'h264',
       outputLocation: outputPath,
       inputProps,
-      // Log render progress to server console
       onProgress: ({ progress }) => {
         process.stdout.write(`\r[render] ${Math.round(progress * 100)}%`);
       },
@@ -74,7 +75,6 @@ export async function POST(req: NextRequest) {
 
     process.stdout.write('\n');
 
-    // Sanity check — make sure a file was actually produced
     if (!fs.existsSync(outputPath)) {
       throw new Error('Render completed but output file not found');
     }
