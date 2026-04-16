@@ -11,7 +11,7 @@
 import React, { useCallback, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { v4 as uuidv4 } from 'uuid';
-import type { Scene } from '@/remotion/types';
+import type { Scene, CandidateInfo } from '@/remotion/types';
 
 /** Safely extracts an error message from any fetch Response. */
 async function readError(res: Response): Promise<string> {
@@ -131,10 +131,14 @@ export default function UploadPage() {
     });
     if (!scriptRes.ok) throw new Error(await readError(scriptRes));
     const scriptText = await scriptRes.text();
-    let scriptBody: { scenes?: Scene[] };
-    try { scriptBody = JSON.parse(scriptText); }
-    catch { throw new Error(`Script API returned non-JSON: ${scriptText.slice(0, 120)}`); }
-    const rawScenes = scriptBody.scenes ?? [];
+    let scriptBody: { scenes: Scene[]; candidate: CandidateInfo };
+    try { 
+      scriptBody = JSON.parse(scriptText); 
+    } catch { 
+      throw new Error(`Script API returned non-JSON: ${scriptText.slice(0, 120)}`); 
+    }
+    const rawScenes = scriptBody.scenes || [];
+    const candidate = scriptBody.candidate;
     setScenes(rawScenes);
 
     setStep('voicing');
@@ -159,7 +163,13 @@ export default function UploadPage() {
     setStep('done');
     sessionStorage.setItem(
       `ncv_${sessionId}`,
-      JSON.stringify({ sessionId, scenes: finalScenes, warning: audioWarning ?? null, photoUrl }),
+      JSON.stringify({ 
+        sessionId, 
+        candidate,
+        scenes: finalScenes, 
+        warning: audioWarning ?? null, 
+        photoUrl 
+      }),
     );
     router.push(`/preview?session=${sessionId}`);
   }

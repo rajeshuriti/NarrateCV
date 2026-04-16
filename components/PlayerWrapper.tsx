@@ -2,37 +2,35 @@
 
 /**
  * Thin wrapper around Remotion <Player> so it can be dynamically imported
- * with ssr:false from the preview page.  Remotion Player relies on browser
- * APIs (requestAnimationFrame, Web Audio) that don't exist in Node.
+ * with ssr:false from the preview page.
  */
 
 import React from 'react';
 import { Player } from '@remotion/player';
 import { NarrateVideo } from '@/remotion/NarrateVideo';
-import type { Scene } from '@/remotion/types';
+import type { Scene, CandidateInfo } from '@/remotion/types';
 
 interface Props {
   scenes: Scene[];
   durationInFrames: number;
   photoUrl?: string;
+  candidate: CandidateInfo;
 }
 
-export default function PlayerWrapper({ scenes, durationInFrames, photoUrl }: Props) {
+export default function PlayerWrapper({ scenes, durationInFrames, photoUrl, candidate }: Props) {
   return (
     <Player
       component={NarrateVideo}
-      inputProps={{ scenes, photoUrl }}
+      inputProps={{ scenes, photoUrl, candidate }}
       durationInFrames={Math.max(durationInFrames, 1)}
       compositionWidth={1920}
       compositionHeight={1080}
       fps={30}
       style={{
         width: '100%',
-        // Maintain 16:9 aspect ratio
         aspectRatio: '16 / 9',
       }}
       controls
-      // Auto-play so users immediately see it working
       autoPlay
       loop
     />

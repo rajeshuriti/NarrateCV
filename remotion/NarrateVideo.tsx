@@ -1,39 +1,75 @@
 import React from 'react';
 import { Sequence, Audio, useVideoConfig } from 'remotion';
 import type { VideoProps, Scene } from './types';
-import { IntroScene } from './scenes/IntroScene';
-import { SkillsScene } from './scenes/SkillsScene';
-import { ExperienceScene } from './scenes/ExperienceScene';
-import { ProjectScene } from './scenes/ProjectScene';
-import { ImpactScene } from './scenes/ImpactScene';
+
+// Cinematic Scene Imports
+import { IntroHero } from './scenes/IntroHero';
+import { SummaryScene } from './scenes/SummaryScene';
+import { SkillsGrid } from './scenes/SkillsGrid';
+import { SkillCategory } from './scenes/SkillCategory';
+import { ExperienceTimeline } from './scenes/ExperienceTimeline';
+import { ProjectShowcase } from './scenes/ProjectShowcase';
+import { MetricsScene } from './scenes/MetricsScene';
+import { StrengthsScene } from './scenes/StrengthsScene';
+import { CareerGoal } from './scenes/CareerGoal';
 import { ClosingScene } from './scenes/ClosingScene';
 
-// Maps scene type → the correct animated component
-function SceneComponent({ scene, photoUrl }: { scene: Scene; photoUrl?: string }) {
+// Background music placeholder - recommend a subtle ambient track
+const BACKGROUND_MUSIC_URL = 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-17.mp3';
+
+function SceneComponent({ 
+  scene, 
+  photoUrl, 
+  candidate 
+}: { 
+  scene: Scene; 
+  photoUrl?: string;
+  candidate?: VideoProps['candidate'];
+}) {
   const photo = scene.usePhoto ? photoUrl : undefined;
 
   switch (scene.type) {
-    case 'intro':
-      return <IntroScene text={scene.text} photoUrl={photo} />;
-    case 'skills':
-      return <SkillsScene text={scene.text} />;
-    case 'experience':
-      return <ExperienceScene text={scene.text} />;
-    case 'project':
-      return <ProjectScene text={scene.text} />;
-    case 'impact':
-      return <ImpactScene text={scene.text} />;
+    case 'intro-hero':
+      return (
+        <IntroHero 
+          title={scene.title || candidate?.name || ''} 
+          subtitle={scene.subtitle || candidate?.headline || ''} 
+          photoUrl={photo} 
+        />
+      );
+    case 'summary':
+      return <SummaryScene text={scene.text} />;
+    case 'skills-grid':
+      return <SkillsGrid text={scene.text} />;
+    case 'skill-category':
+      return <SkillCategory title={scene.title} text={scene.text} />;
+    case 'experience-timeline':
+      return (
+        <ExperienceTimeline 
+          title={scene.title} 
+          subtitle={scene.subtitle} 
+          text={scene.text} 
+        />
+      );
+    case 'project-showcase':
+      return <ProjectShowcase title={scene.title} text={scene.text} />;
+    case 'metrics':
+      return <MetricsScene text={scene.text} />;
+    case 'strengths':
+      return <StrengthsScene text={scene.text} />;
+    case 'career-goal':
+      return <CareerGoal text={scene.text} />;
     case 'closing':
       return <ClosingScene text={scene.text} photoUrl={photo} />;
     default:
-      return <ClosingScene text={scene.text} />;
+      return <SummaryScene text={scene.text} />;
   }
 }
 
-export const NarrateVideo: React.FC<VideoProps> = ({ scenes, photoUrl }) => {
+export const NarrateVideo: React.FC<VideoProps> = ({ candidate, scenes, photoUrl }) => {
   const { fps } = useVideoConfig();
 
-  // Build cumulative start frames for each scene
+  // Dynamic timeline builder
   let cursor = 0;
   const sequencedScenes = scenes.map((scene) => {
     const from = cursor;
@@ -44,18 +80,31 @@ export const NarrateVideo: React.FC<VideoProps> = ({ scenes, photoUrl }) => {
 
   return (
     <div style={{ width: '100%', height: '100%', background: '#0a0a14' }}>
+      {/* Cinematic Background Music */}
+      <Audio
+        src={BACKGROUND_MUSIC_URL}
+        volume={0.15} // Low volume for professional feel
+        loop
+      />
+
       {sequencedScenes.map(({ scene, from, durationInFrames }, i) => (
         <Sequence key={i} from={from} durationInFrames={durationInFrames}>
-          {/* Voice-over audio for this scene — only rendered when audioUrl is present */}
+          {/* Voice-over audio for THIS specific scene */}
           {scene.audioUrl && (
             <Audio
               src={scene.audioUrl}
               startFrom={0}
+              volume={1.0}
             />
           )}
-          {/* Full-frame scene visual */}
+          
+          {/* Visual Layer */}
           <div style={{ position: 'absolute', inset: 0 }}>
-            <SceneComponent scene={scene} photoUrl={photoUrl} />
+            <SceneComponent 
+              scene={scene} 
+              photoUrl={photoUrl} 
+              candidate={candidate} 
+            />
           </div>
         </Sequence>
       ))}

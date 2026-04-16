@@ -1,16 +1,11 @@
 /**
  * POST /api/render
- * Body: { sessionId: string, scenes: Scene[], photoUrl?: string }
+ * Body: { sessionId: string, candidate: CandidateInfo, scenes: Scene[], photoUrl?: string }
  *
  * Server-side Remotion render pipeline:
  *   1. bundle() — webpack-bundles the Remotion entry point
  *   2. selectComposition() — resolves the composition + calculateMetadata
  *   3. renderMedia() — Chrome renders every frame → H.264 MP4
- *
- * Returns: { videoUrl: string }
- *
- * NOTE: This can take 30–90 s for a 30 s video.
- * For production, move to a background job queue + polling endpoint.
  */
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -19,7 +14,7 @@ import fs from 'fs';
 import { bundle } from '@remotion/bundler';
 import { renderMedia, selectComposition } from '@remotion/renderer';
 import { ensureSessionDir } from '@/lib/session';
-import type { Scene } from '@/remotion/types';
+import type { Scene, CandidateInfo } from '@/remotion/types';
 
 export const runtime = 'nodejs';
 export const maxDuration = 300; // 5-minute timeout
@@ -33,14 +28,15 @@ function getBaseUrl(req: NextRequest): string {
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { sessionId, scenes, photoUrl } = body as {
+    const { sessionId, candidate, scenes, photoUrl } = body as {
       sessionId: string;
+      candidate: CandidateInfo;
       scenes: Scene[];
       photoUrl?: string;
     };
 
-    if (!sessionId || !Array.isArray(scenes) || scenes.length === 0) {
-      return NextResponse.json({ error: 'sessionId and scenes required' }, { status: 400 });
+    if (!sessionId || !candidate || !Array.isArray(scenes) || scenes.length === 0) {
+      return NextResponse.json({ error: 'sessionId, candidate, and scenes are required' }, { status: 400 });
     }
 
     const dir = ensureSessionDir(sessionId);
@@ -50,11 +46,10 @@ export async function POST(req: NextRequest) {
     const entryPoint = path.join(process.cwd(), 'remotion', 'index.ts');
     const bundleLocation = await bundle({
       entryPoint,
-      webpackOverride: (cfg) => cfg,
     });
 
     // ── 2. Resolve the composition (runs calculateMetadata) ─────────────────
-    const inputProps = { scenes, photoUrl };
+    const inputProps = { candidate, scenes, photoUrl };
     const composition = await selectComposition({
       serveUrl: bundleLocation,
       id: 'NarrateCV',
@@ -68,12 +63,7 @@ export async function POST(req: NextRequest) {
       codec: 'h264',
       outputLocation: outputPath,
       inputProps,
-      onProgress: ({ progress }) => {
-        process.stdout.write(`\r[render] ${Math.round(progress * 100)}%`);
-      },
     });
-
-    process.stdout.write('\n');
 
     if (!fs.existsSync(outputPath)) {
       throw new Error('Render completed but output file not found');
